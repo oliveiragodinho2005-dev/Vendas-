@@ -1,0 +1,23 @@
+# Build
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Segredos e configuracao local
+.env
+*.env
+!.env.example
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# Sistema operacional e logs
+.DS_Store
+Thumbs.db
+*.log
