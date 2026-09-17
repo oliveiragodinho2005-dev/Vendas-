@@ -24,6 +24,13 @@ spring:
   jackson:
     time-zone: UTC
 
+  servlet:
+    multipart:
+      # Folga acima de apostas.ia.limite-imagem-mb para que a mensagem de erro venha
+      # da validacao do dominio, que explica o motivo, e nao do container.
+      max-file-size: 8MB
+      max-request-size: 10MB
+
 server:
   port: ${SERVER_PORT:8080}
 
@@ -41,3 +48,12 @@ apostas:
       chave: ${API_FOOTBALL_KEY:}
     odds-api:
       chave: ${ODDS_API_KEY:}
+
+  ia:
+    # Leitura de bilhete por imagem. Sem ANTHROPIC_API_KEY a aplicacao sobe normalmente
+    # e o endpoint responde 503 explicando o que falta.
+    chave: ${ANTHROPIC_API_KEY:}
+    modelo: claude-opus-5
+    esforco: high
+    max-tokens: 16000
+    limite-imagem-mb: 5

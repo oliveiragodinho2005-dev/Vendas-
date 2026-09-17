@@ -3,6 +3,7 @@ package br.com.seuprojeto.repositorio;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
+import br.com.seuprojeto.dominio.ApelidoDeTime;
 import br.com.seuprojeto.dominio.CasaDeAposta;
 import br.com.seuprojeto.dominio.Mercado;
 import br.com.seuprojeto.dominio.Odd;
@@ -11,10 +12,13 @@ import br.com.seuprojeto.dominio.Selecao;
 import br.com.seuprojeto.dominio.StatusPartida;
 import br.com.seuprojeto.dominio.Temporada;
 import br.com.seuprojeto.dominio.Time;
+import br.com.seuprojeto.servico.ResolucaoDeTime;
+import br.com.seuprojeto.servico.ResolvedorDeTimes;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,6 +64,10 @@ class PersistenciaIT {
     @Autowired
     private OddRepository odds;
     @Autowired
+    private ApelidoDeTimeRepository apelidos;
+    @Autowired
+    private ResolvedorDeTimes resolvedor;
+    @Autowired
     private JdbcTemplate jdbc;
 
     private Temporada temporada;
@@ -84,7 +92,7 @@ class PersistenciaIT {
         List<String> versoes = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
 
-        assertThat(versoes).contains("1", "2");
+        assertThat(versoes).contains("1", "2", "3");
     }
 
     @Test
@@ -146,6 +154,47 @@ class PersistenciaIT {
 
         assertThat(gravadas).isEqualTo(Selecao.values().length);
         assertThat(odds.findByPartidaOrderByColetadaEmDesc(partida)).hasSize(gravadas);
+    }
+
+    @Test
+    void resolvedorCasaNomeFormalComCadastroCurto() {
+        Map<String, ResolucaoDeTime> resolvido =
+                resolvedor.resolver(List.of("Clube de Regatas do Flamengo", "PALMEIRAS"));
+
+        assertThat(resolvido.get("Clube de Regatas do Flamengo").time()).isEqualTo(flamengo);
+        assertThat(resolvido.get("PALMEIRAS").time()).isEqualTo(palmeiras);
+    }
+
+    @Test
+    void resolvedorRecusaNomeQueBateComDoisTimes() {
+        // Dois clubes cujo nome util colide: vincular qualquer um seria chute.
+        Time americaMineiro = times.saveAndFlush(new Time("America"));
+        times.saveAndFlush(new Time("America FC"));
+
+        Map<String, ResolucaoDeTime> resolvido = resolvedor.resolver(List.of("America"));
+
+        assertThat(resolvido.get("America").situacao())
+                .isEqualTo(ResolucaoDeTime.Situacao.AMBIGUO);
+        assertThat(resolvido.get("America").time()).isNull();
+        assertThat(americaMineiro.getId()).isNotNull();
+    }
+
+    @Test
+    void apelidoCuradoResolveOQueANormalizacaoNaoAlcanca() {
+        apelidos.saveAndFlush(new ApelidoDeTime(flamengo, "Mengao"));
+
+        Map<String, ResolucaoDeTime> resolvido = resolvedor.resolver(List.of("Mengao"));
+
+        assertThat(resolvido.get("Mengao").resolvido()).isTrue();
+        assertThat(resolvido.get("Mengao").time()).isEqualTo(flamengo);
+    }
+
+    @Test
+    void bancoRejeitaApelidoApontandoParaDoisTimes() {
+        apelidos.saveAndFlush(new ApelidoDeTime(flamengo, "Tricolor"));
+
+        assertThatExceptionOfType(DataIntegrityViolationException.class).isThrownBy(() ->
+                apelidos.saveAndFlush(new ApelidoDeTime(palmeiras, "Tricolor")));
     }
 
     @Test
