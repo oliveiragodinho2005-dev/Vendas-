@@ -49,6 +49,23 @@ apostas:
     odds-api:
       chave: ${ODDS_API_KEY:}
 
+  ingestao:
+    # Desligada por padrao. Ligue so depois de configurar as chaves e conferir os
+    # tetos: no plano gratuito da API-Football sao 100 requisicoes por dia.
+    habilitada: ${INGESTAO_HABILITADA:false}
+    competicao: BRASILEIRAO_SERIE_A
+    # Temporada corrente mais as 3 anteriores.
+    temporadas: 4
+    requisicoes-por-dia-resultados: 100
+    requisicoes-por-dia-odds: 100
+    # Coleta odds dos jogos que comecam nas proximas 72h...
+    janela-de-odds-em-horas: 72
+    # ...no maximo uma vez a cada 3h, para nao repetir chamada sem linha nova.
+    intervalo-entre-coletas-de-odds: PT3H
+    casas-de-interesse: bet365,pinnacle
+    cron-resultados: "0 20 */6 * * *"
+    cron-odds: "0 40 */3 * * *"
+
   ia:
     # Leitura de bilhete por imagem. Sem ANTHROPIC_API_KEY a aplicacao sobe normalmente
     # e o endpoint responde 503 explicando o que falta.

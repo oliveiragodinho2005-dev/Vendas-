@@ -20,4 +20,7 @@ public interface OddRepository extends JpaRepository<Odd, Long> {
             Partida partida, CasaDeAposta casa, Mercado mercado, Selecao selecao);
 
     List<Odd> findByPartidaOrderByColetadaEmDesc(Partida partida);
+
+    /** Instante da coleta mais recente, de qualquer partida: base do intervalo entre coletas. */
+    Optional<Odd> findTopByOrderByColetadaEmDesc();
 }

@@ -12,7 +12,7 @@ o valor esperado (EV) de cada seleção.
 | Fase | Escopo | Situação |
 |---|---|---|
 | 1 | Fundação: schema, entidades, Flyway, Docker Compose | ✅ concluída |
-| 2 | Ingestão: API-Football, fonte de odds, jobs agendados | pendente |
+| 2 | Ingestão: API-Football, fonte de odds, jobs agendados | 🟡 2A pronta; adaptadores HTTP pendentes |
 | 3 | Motor de probabilidades: Poisson + Dixon-Coles | pendente |
 | 4 | Valor esperado, Kelly fracionário e API REST | pendente |
 | 5 | Backtest: Brier, log loss, ROI, calibração, CLV | pendente |
@@ -105,6 +105,60 @@ docker compose down        # mantém os dados
 docker compose down -v     # descarta o volume também
 ```
 
+## Ingestão
+
+Desligada por padrão. Para ligar:
+
+```bash
+export INGESTAO_HABILITADA=true
+export API_FOOTBALL_KEY=...
+```
+
+Dois jobs, ambos guiados pelo `PlanejadorDeIngestao` — eles não decidem nada
+sozinhos, perguntam o que mudou e só então gastam requisição:
+
+| Job | Cron padrão | O que faz |
+|---|---|---|
+| `sincronizarResultados` | `0 20 */6 * * *` | Importa temporadas faltantes e atualiza jogos sem resultado |
+| `coletarOdds` | `0 40 */3 * * *` | Coleta odds dos jogos que começam na janela configurada |
+
+### Orçamento de requisições
+
+O plano gratuito da API-Football dá 100 requisições por dia. O desenho respeita
+isso em três níveis:
+
+- **Busca em lote.** As portas trabalham por temporada e por janela de tempo,
+  nunca por partida. Uma temporada inteira do Brasileirão custa 1 requisição de
+  `/fixtures`, não 380. O histórico de 4 temporadas sai em ~8.
+- **O planejador evita a chamada.** Temporada encerrada não é rebuscada. Jogo
+  cujo horário ainda não passou não gera pedido de resultado. Odds não são
+  coletadas duas vezes dentro do mesmo intervalo.
+- **Cota persistida.** `consumo_de_api` conta o gasto do dia por fonte, no banco.
+  Reiniciar a aplicação não zera o contador, e a reserva é atômica — dois jobs
+  concorrentes não passam do teto.
+
+Ajustes em `apostas.ingestao`:
+
+| Chave | Padrão | Para quê |
+|---|---|---|
+| `habilitada` | `false` | Liga os jobs |
+| `temporadas` | `4` | Corrente + 3 anteriores |
+| `requisicoes-por-dia-resultados` | `100` | Teto diário da fonte de dados |
+| `requisicoes-por-dia-odds` | `100` | Teto diário da fonte de odds |
+| `janela-de-odds-em-horas` | `72` | Quão à frente coletar odds |
+| `intervalo-entre-coletas-de-odds` | `PT3H` | Intervalo mínimo entre coletas |
+| `casas-de-interesse` | `bet365,pinnacle` | Casas filtradas na fonte |
+
+### O que ainda falta (Fase 2B)
+
+As portas `FonteDeDados` e `FonteDeOdds` ainda não têm adaptador HTTP. Enquanto
+não tiverem, `FonteDeDadosAusente` responde `disponivel() = false` e os jobs
+pulam em silêncio — a aplicação sobe e funciona normalmente.
+
+Escrever esses adaptadores exige as respostas JSON reais de cada API. Quando o
+adaptador real for registrado como bean, ele assume o lugar do ausente
+automaticamente, via `@ConditionalOnMissingBean`.
+
 ## Variáveis de ambiente
 
 Todas são lidas do ambiente; nenhuma credencial fica no repositório. Veja
@@ -190,6 +244,15 @@ sem subir contexto.
 - **Porta e adaptador na leitura por IA.** `LeitorDeBilhete` é uma interface em Java
   puro; o SDK vive só no adaptador. Por isso os testes do serviço rodam com um dublê,
   sem rede, sem chave e sem custo.
+- **A ingestão busca em lote, nunca por partida.** É o que mantém o histórico de
+  4 temporadas dentro de ~8 requisições. Uma porta que aceitasse buscar um jogo
+  por vez convidaria a torrar a franquia diária em um único job.
+- **A cota vive no banco, não em memória.** Reiniciar a aplicação não pode zerar
+  o gasto do dia, e a reserva é uma única instrução condicional — ler o contador
+  e depois gravar abriria janela para dois jobs passarem do teto.
+- **Sincronização adota em vez de duplicar.** Um time que entrou pela leitura de
+  um bilhete ganha seu `idExterno` na primeira ingestão, em vez de virar um
+  segundo "Flamengo" ao lado do primeiro.
 - **Nome ambíguo não vira chute.** Se um nome lido bate com mais de um time, a
   resolução devolve `AMBIGUO` em vez de escolher. Vínculo errado não aparece como
   erro: ele vira um EV calculado contra o jogo errado.
@@ -204,5 +267,6 @@ sem subir contexto.
 | `casas_de_aposta` | bet365 (alvo) e Pinnacle (referência de mercado) |
 | `odds` | Cotações coletadas, em série temporal |
 | `apelidos_de_time` | "Galo", "Mengão" e grafias que a normalização não alcança |
+| `consumo_de_api` | Franquia diária gasta por fonte externa |
 
 Mercados suportados: `RESULTADO_1X2`, `OVER_UNDER_2_5`, `AMBAS_MARCAM`.

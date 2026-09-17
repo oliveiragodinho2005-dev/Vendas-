@@ -104,6 +104,18 @@ public class Partida {
         this.status = StatusPartida.ENCERRADA;
     }
 
+    /**
+     * Move a partida de data ou de rodada. Tabela de Brasileirao muda o tempo todo:
+     * jogo adiado por CBF, mudanca de horario por TV, rodada remarcada.
+     */
+    public void reagendar(OffsetDateTime dataHora, int rodada) {
+        if (rodada < 1) {
+            throw new IllegalArgumentException("rodada deve ser positiva, recebido: " + rodada);
+        }
+        this.dataHora = Objects.requireNonNull(dataHora, "dataHora");
+        this.rodada = rodada;
+    }
+
     public void alterarStatus(StatusPartida status) {
         this.status = Objects.requireNonNull(status, "status");
     }
